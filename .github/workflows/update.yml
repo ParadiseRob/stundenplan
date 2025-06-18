@@ -16,45 +16,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
-
-      - name: Install dependencies
-        run: |
-          pip install beautifulsoup4 ics
-
-      - name: Download Stundenplan
-        run: |
-          curl -o stundenplan.html "https://studieninstitute.org/Duisburg/kursauswahl.php?KursName=Stg25FiSoG&abc=S"
-
-      - name: Parse HTML to ICS
-        run: python stundenplan_parser.py
-
-      - name: Commit & push ICS
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@users.noreply.github.com
-          git add stundenplan_export.ics || echo "No file"
-          git commit -m "Update ICS automatically" || echo "Nothing to commit"
-          git push
-name: Update ICS file daily
-
-on:
-  schedule:
-    - cron: '0 2 * * *'  # täglich um 2:00 UTC
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
