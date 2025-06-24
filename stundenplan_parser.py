@@ -3,35 +3,11 @@ from ics import Calendar, Event
 from datetime import datetime
 import uuid
 
-# Lade die Stundenplan-HTML-Datei
 with open("stundenplan.html", encoding="windows-1252") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
 
-# Füge VTIMEZONE-Definition hinzu (für Europe/Berlin)
-cal.extra.append("""
-BEGIN:VTIMEZONE
-TZID:Europe/Berlin
-X-LIC-LOCATION:Europe/Berlin
-BEGIN:DAYLIGHT
-TZOFFSETFROM:+0100
-TZOFFSETTO:+0200
-TZNAME:CEST
-DTSTART:19700329T020000
-RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
-END:DAYLIGHT
-BEGIN:STANDARD
-TZOFFSETFROM:+0200
-TZOFFSETTO:+0100
-TZNAME:CET
-DTSTART:19701025T030000
-RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
-END:STANDARD
-END:VTIMEZONE
-""")
-
-# Verarbeite alle Tages-Tabellen (jeweils ein Tag pro Spalte)
 for table in soup.find_all("table", {"border": "1"}):
     th = table.find("th")
     if not th:
@@ -58,7 +34,6 @@ for table in soup.find_all("table", {"border": "1"}):
             continue
 
         subject = lines[1] if len(lines) > 1 else "Unterricht"
-        note = lines[2] if len(lines) > 2 else ""
 
         start_dt = datetime.combine(date, start_time)
         end_dt = datetime.combine(date, end_time)
@@ -68,13 +43,7 @@ for table in soup.find_all("table", {"border": "1"}):
         e.begin = f"{start_dt.strftime('%Y%m%dT%H%M%S')}"
         e.end = f"{end_dt.strftime('%Y%m%dT%H%M%S')}"
         e.uid = f"{uuid.uuid4()}@stundenplan"
-
-        # Lokale Zeitzone angeben
-        e.extra.append("DTSTART;TZID=Europe/Berlin:" + start_dt.strftime("%Y%m%dT%H%M%S"))
-        e.extra.append("DTEND;TZID=Europe/Berlin:" + end_dt.strftime("%Y%m%dT%H%M%S"))
-
         cal.events.add(e)
 
-# ICS-Datei speichern
 with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
     f.writelines(cal.serialize_iter())
