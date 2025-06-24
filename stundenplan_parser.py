@@ -1,3 +1,10 @@
+print("DEBUG: HTML-Datei öffne und zeile 1–10 anzeigen")
+with open("stundenplan.html", encoding="windows-1252") as f:
+    for i in range(10):
+        print(repr(f.readline()))
+# und ab hier der Rest deines Codes...
+
+
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from ics import Calendar, Event
