@@ -25,11 +25,15 @@ jobs:
       - name: Run parser script
         run: python stundenplan_parser.py
 
-      - name: Commit and Push changes
+      - name: Commit and push ICS changes
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git pull --rebase origin main || echo "Rebase failed or nothing to rebase"
-          git add stundenplan_export.ics
-          git commit -m "Update ICS automatically" || echo "No changes to commit"
-          git push origin HEAD:main || echo "Push failed"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git pull --rebase origin main || echo "Nothing to rebase"
+          if git diff --quiet; then
+            echo "No changes to commit"
+          else
+            git add stundenplan_export.ics
+            git commit -m "Update ICS automatically"
+            git push origin HEAD:main || echo "Push failed"
+          fi
