@@ -1,62 +1,68 @@
 from bs4 import BeautifulSoup
 from ics import Calendar, Event
 from datetime import datetime, timedelta
-import uuid
 import pytz
-import re
+import uuid
 
-berlin = pytz.timezone("Europe/Berlin")
+# --- Einstellungen ---
+input_file = "stundenplan.html"  # Deine HTML-Datei
+output_file = "stundenplan.ics"  # Ausgabe-ICS-Datei
+timezone = pytz.timezone("Europe/Berlin")
 
-with open("stundenplan.html", encoding="windows-1252") as f:
+# --- Einlesen und Parsen ---
+with open(input_file, "r", encoding="utf-8") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
 
-for table in soup.find_all("table", {"border": "1"}):
+# Alle Tabellen im Dokument
+tables = soup.find_all("table")
+
+for table in tables:
+    # Suche das Datum im <th>
     th = table.find("th")
     if not th:
         continue
     try:
-        date = datetime.strptime(th.text.strip(), "%d.%m.%Y").date()
+        datum = datetime.strptime(th.text.strip(), "%d.%m.%Y").date()
     except ValueError:
-        continue
+        continue  # Kein valides Datum, überspringen
 
-    for td in table.find_all("td"):
-        lines = [line.strip() for line in td.stripped_strings]
-        if not lines or len(lines) < 1:
-            continue
+    # Finde alle Unterrichtszellen (<td> mit bgcolor C0C0C0)
+    tds = table.find_all("td", bgcolor="#C0C0C0")
 
-        time_range = lines[0]
-        if "-" not in time_range:
-            continue
+    for td in tds:
+        fonts = td.find_all("font")
+        if len(fonts) < 2:
+            continue  # unvollständig
 
+        zeit_text = fonts[0].text.strip()
+        fach = fonts[1].text.strip()
+
+        if not zeit_text or not fach:
+            continue  # leeres Feld
+
+        # Zeiten parsen
         try:
-            start_str, end_str = time_range.split("-")
+            start_str, end_str = zeit_text.split("-")
             start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
             end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
         except ValueError:
-            continue
+            continue  # Formatfehler
 
-        # Suche nach Fachname (überspringe Uhrzeit und 32/56-Angaben)
-        title = "Unterricht"
-        for line in lines[1:]:
-            if re.match(r"^\d+/\d+$", line):
-                continue  # ignoriere reine Zahlenformate wie 32/56
-            if line.lower().startswith("raum") or line.lower().startswith("frau") or line.lower().startswith("herr"):
-                continue  # ignoriere Lehrkraft oder Räume
-            if line:  # Erste nicht-leere, gültige Zeile nehmen
-                title = line
-                break
+        # Lokales Start- und Endzeit-Datum kombinieren
+        start_dt = timezone.localize(datetime.combine(datum, start_time))
+        end_dt = timezone.localize(datetime.combine(datum, end_time))
 
-        start_dt = berlin.localize(datetime.combine(date, start_time))
-        end_dt = berlin.localize(datetime.combine(date, end_time))
-
+        # Event erzeugen
         event = Event()
-        event.name = title
-        event.begin = start_dt
-        event.end = end_dt
+        event.name = fach
+        event.begin = start_dt.astimezone(pytz.utc)
+        event.end = end_dt.astimezone(pytz.utc)
         event.uid = f"{uuid.uuid4()}@stundenplan"
+
         cal.events.add(event)
 
-with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
+# --- Speichern ---
+with open(output_file, "w", encoding="utf-8") as f:
     f.writelines(cal.serialize_iter())
