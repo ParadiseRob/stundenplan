@@ -1,37 +1,55 @@
 from bs4 import BeautifulSoup
+from datetime import datetime, timedelta
 from ics import Calendar, Event
-from datetime import datetime
-import pytz
 
-berlin = pytz.timezone("Europe/Berlin")
-
-with open("stundenplan.html", encoding="ISO-8859-1") as f:
+with open("stundenplan.html", encoding="windows-1252") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
 
-for row in soup.select("tr")[1:]:
-    cols = row.find_all("td")
-    if len(cols) < 5:
+# Jeder Tag ist eine Tabelle
+tables = soup.find_all("table", {"border": "1"})
+for table in tables:
+    rows = table.find_all("tr")
+    if not rows:
         continue
 
-    date_str = cols[0].text.strip()
-    time_str = cols[1].text.strip()
-    subject = cols[2].text.strip()
-
+    # Datum aus erster Zeile (z. B. "07.07.2025")
+    date_cell = rows[0].find("th")
+    if not date_cell:
+        continue
     try:
-        start_time, end_time = time_str.split(" - ")
-        start_dt = berlin.localize(datetime.strptime(f"{date_str} {start_time}", "%d.%m.%Y %H:%M"))
-        end_dt = berlin.localize(datetime.strptime(f"{date_str} {end_time}", "%d.%m.%Y %H:%M"))
+        day = datetime.strptime(date_cell.text.strip(), "%d.%m.%Y")
+    except ValueError:
+        continue
 
-        e = Event()
-        e.name = subject
-        e.begin = start_dt
-        e.end = end_dt
-        cal.events.add(e)
+    # Danach folgen Blöcke mit Terminen
+    for row in rows[1:]:
+        cell = row.find("td")
+        if not cell:
+            continue
+        lines = [line.strip() for line in cell.stripped_strings]
+        if not lines or len(lines) < 2:
+            continue
+        time_range = lines[0]  # z. B. "08:15-09:45"
+        title = lines[1]       # z. B. "AVR"
 
-    except Exception as e:
-        print("Fehler beim Parsen:", e)
+        try:
+            start_str, end_str = time_range.split("-")
+            start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
+            end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
+        except ValueError:
+            continue  # Falls Zeitangabe ungültig ist
 
+        start_dt = datetime.combine(day.date(), start_time)
+        end_dt = datetime.combine(day.date(), end_time)
+
+        event = Event()
+        event.name = title or "Unterricht"
+        event.begin = start_dt.isoformat()
+        event.end = end_dt.isoformat()
+        cal.events.add(event)
+
+# Speichern
 with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
     f.writelines(cal)
