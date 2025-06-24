@@ -4,16 +4,15 @@ from datetime import datetime, timedelta
 import uuid
 import pytz
 
-# Lokale Zeitzone für Deutschland
 berlin = pytz.timezone("Europe/Berlin")
 
-# Stundenplan-HTML laden
+# Lade HTML-Datei
 with open("stundenplan.html", encoding="windows-1252") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
 
-# Durch alle Tages-Tabellen gehen
+# Tabellen mit Terminen durchgehen
 for table in soup.find_all("table", {"border": "1"}):
     th = table.find("th")
     if not th:
@@ -23,7 +22,6 @@ for table in soup.find_all("table", {"border": "1"}):
     except ValueError:
         continue
 
-    # Alle Zellen des Tages auswerten
     for td in table.find_all("td"):
         lines = list(td.stripped_strings)
         if not lines or "-" not in lines[0]:
@@ -31,12 +29,13 @@ for table in soup.find_all("table", {"border": "1"}):
 
         try:
             time_range = lines[0]
-            start_str, end_str = [t.strip() for t in time_range.split("-")]
-            start_time = datetime.strptime(start_str, "%H:%M").time()
-            end_time = datetime.strptime(end_str, "%H:%M").time()
+            start_str, end_str = time_range.split("-")
+            start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
+            end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
         except ValueError:
             continue
 
+        # 💡 Jetzt holen wir uns den Fachnamen (Zeile 2) und ggf. Lehrkraft/Ort (Zeile 3)
         subject = lines[1] if len(lines) > 1 else "Unterricht"
         note = lines[2] if len(lines) > 2 else ""
 
@@ -44,14 +43,14 @@ for table in soup.find_all("table", {"border": "1"}):
         end_dt = berlin.localize(datetime.combine(date, end_time))
 
         e = Event()
-        e.name = subject
+        e.name = subject  # ➜ AVR, Verworga etc.
         if note:
-            e.description = note
+            e.description = note  # ➜ z. B. "Frau Mustermann, Raum 103"
         e.begin = start_dt
         e.end = end_dt
         e.uid = f"{uuid.uuid4()}@stundenplan"
         cal.events.add(e)
 
-# ICS-Datei schreiben
+# Speichern
 with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
     f.writelines(cal.serialize_iter())
