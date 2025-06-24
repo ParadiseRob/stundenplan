@@ -1,82 +1,65 @@
 from bs4 import BeautifulSoup
 from ics import Calendar, Event
-from datetime import datetime, timedelta
-import uuid
+from datetime import datetime
 import pytz
 
-# === Konfiguration ===
-FACHNAMEN = {
-    "Termin Ausbildung",
-    "KFM",
-    "RdG",
-    "Verworga",
-    "AVR",
-    "Buchf",
-    "HSK",
-    "BGB",
-    "Pers.R",
-    "Lehrprobe",
-}
+# Fächerliste (optional zur Validierung)
+faecher = [
+    "Termin Ausbildung", "KFM", "RdG", "Verworga",
+    "AVR", "Buchf", "HSK", "BGB", "Pers.R", "Lehrprobe"
+]
 
-# === HTML laden ===
-with open("stundenplan.html", encoding="latin1") as f:
+# Lade HTML-Datei
+with open("stundenplan.html", "r", encoding="latin-1") as f:
     soup = BeautifulSoup(f, "html.parser")
 
-cal = Calendar()
+calendar = Calendar()
 timezone = pytz.timezone("Europe/Berlin")
 
-# === Tabellen mit Datum verarbeiten ===
-for table in soup.find_all("table", {"border": "1"}):
+# Suche alle Tages-Tabellen
+for table in soup.find_all("table"):
     header = table.find("th")
-    if not header:
+    if not header or not header.text.strip():
         continue
-
     try:
         datum = datetime.strptime(header.text.strip(), "%d.%m.%Y").date()
-        print(f"Datum gefunden: {datum}")
     except ValueError:
         continue
 
-    for td in table.find_all("td"):
+    # Einzelne Zellen durchgehen
+    for td in table.find_all("td", bgcolor="#C0C0C0"):
         fonts = td.find_all("font")
         if len(fonts) < 2:
             continue
 
-        zeit_raw = fonts[0].get_text(strip=True)
-        fach = fonts[1].get_text(strip=True).strip()
+        zeitraum_text = fonts[0].text.strip()
+        fach_text = fonts[1].text.strip()
 
-        print(f"  Zeit: {zeit_raw}, Fach: '{fach}'")
-
-        if not fach or fach not in FACHNAMEN:
-            print(f"  -> übersprungen (Fach nicht relevant)")
+        if not zeitraum_text or not fach_text:
             continue
 
-        if "-" not in zeit_raw:
-            continue
+        if not any(fach_text.startswith(fach) for fach in faecher):
+            continue  # ignorieren, wenn kein Fach
 
+        zeiten = zeitraum_text.split("|")[0].strip()
         try:
-            start_str, end_str = zeit_raw.split("-")
-            start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
-            end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
+            von, bis = zeiten.split("-")
         except ValueError:
-            continue
+            continue  # ungültige Zeitangabe
 
-        start_dt = timezone.localize(datetime.combine(datum, start_time))
-        end_dt = timezone.localize(datetime.combine(datum, end_time))
+        start_dt = datetime.strptime(f"{datum} {von}", "%Y-%m-%d %H:%M")
+        end_dt = datetime.strptime(f"{datum} {bis}", "%Y-%m-%d %H:%M")
 
         event = Event()
-        event.name = fach
-        event.begin = start_dt
-        event.end = end_dt
-        event.uid = f"{uuid.uuid4()}@stundenplan"
-        cal.events.add(event)
+        event.name = fach_text
+        event.begin = timezone.localize(start_dt)
+        event.end = timezone.localize(end_dt)
+        calendar.events.add(event)
 
-# === Ausgabe ===
-print(f"Erzeugte Events: {len(cal.events)}")
-
-if len(cal.events) > 0:
+# Nur schreiben, wenn mindestens ein Termin gefunden wurde
+if calendar.events:
     with open("stundenplan.ics", "w", encoding="utf-8") as f:
-        f.writelines(cal.serialize_iter())
+        f.writelines(calendar)
     print("ICS-Datei erfolgreich geschrieben.")
 else:
-    print("Keine Events erzeugt. ICS-Datei wurde nicht erstellt.")
+    print("⚠️ Keine Termine gefunden – keine ICS-Datei geschrieben.")
