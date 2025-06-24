@@ -61,3 +61,20 @@ for table in soup.find_all("table", {"border": "1"}):
         note = lines[2] if len(lines) > 2 else ""
 
         start_dt = datetime.combine(date, start_time)
+        end_dt = datetime.combine(date, end_time)
+
+        e = Event()
+        e.name = subject
+        e.begin = f"{start_dt.strftime('%Y%m%dT%H%M%S')}"
+        e.end = f"{end_dt.strftime('%Y%m%dT%H%M%S')}"
+        e.uid = f"{uuid.uuid4()}@stundenplan"
+
+        # Lokale Zeitzone angeben
+        e.extra.append("DTSTART;TZID=Europe/Berlin:" + start_dt.strftime("%Y%m%dT%H%M%S"))
+        e.extra.append("DTEND;TZID=Europe/Berlin:" + end_dt.strftime("%Y%m%dT%H%M%S"))
+
+        cal.events.add(e)
+
+# ICS-Datei speichern
+with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
+    f.writelines(cal.serialize_iter())
