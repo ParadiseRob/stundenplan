@@ -1,68 +1,57 @@
+import re
+import uuid
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from ics import Calendar, Event
-from datetime import datetime, timedelta
-import pytz
-import uuid
 
-# --- Einstellungen ---
-input_file = "stundenplan.html"  # Deine HTML-Datei
-output_file = "stundenplan.ics"  # Ausgabe-ICS-Datei
-timezone = pytz.timezone("Europe/Berlin")
+FACHNAMEN = {
+    "Termin Ausbildung", "KFM", "RdG", "Verworga", "AVR",
+    "Buchf", "HSK", "BGB", "Pers.R", "Lehrprobe"
+}
 
-# --- Einlesen und Parsen ---
-with open(input_file, "r", encoding="windows-1252") as f:
-    soup = BeautifulSoup(f, "html.parser")
+def parse_time(tstr):
+    """Wandelt z.B. '08:15-09:45' in (start_dt, end_dt) um"""
+    start, end = tstr.split('-')
+    return start.strip(), end.strip()
 
-cal = Calendar()
+def parse_html_to_ics(html_path, ics_path):
+    with open(html_path, "r", encoding="latin1") as f:
+        soup = BeautifulSoup(f.read(), "html.parser")
 
-# Alle Tabellen im Dokument
-tables = soup.find_all("table")
+    cal = Calendar()
 
-for table in tables:
-    # Suche das Datum im <th>
-    th = table.find("th")
-    if not th:
-        continue
-    try:
-        datum = datetime.strptime(th.text.strip(), "%d.%m.%Y").date()
-    except ValueError:
-        continue  # Kein valides Datum, überspringen
+    # Finde alle Datumstabellen
+    for table in soup.find_all("table"):
+        header = table.find("th")
+        if header and re.match(r"\d{2}\.\d{2}\.\d{4}", header.text.strip()):
+            datum_str = header.text.strip()
+            datum = datetime.strptime(datum_str, "%d.%m.%Y").date()
 
-    # Finde alle Unterrichtszellen (<td> mit bgcolor C0C0C0)
-    tds = table.find_all("td", bgcolor="#C0C0C0")
+            for cell in table.find_all("td"):
+                fonts = cell.find_all("font")
+                if len(fonts) >= 2:
+                    zeitinfo = fonts[0].get_text(strip=True)
+                    fach = fonts[1].get_text(strip=True)
 
-    for td in tds:
-        fonts = td.find_all("font")
-        if len(fonts) < 2:
-            continue  # unvollständig
+                    if not fach or fach not in FACHNAMEN:
+                        continue
 
-        zeit_text = fonts[0].text.strip()
-        fach = fonts[1].text.strip()
+                    # Zeit auslesen und zusammensetzen
+                    zeit_match = re.search(r"\d{2}:\d{2}-\d{2}:\d{2}", zeitinfo)
+                    if not zeit_match:
+                        continue
+                    start_str, end_str = parse_time(zeit_match.group())
+                    start_dt = datetime.strptime(f"{datum} {start_str}", "%Y-%m-%d %H:%M")
+                    end_dt = datetime.strptime(f"{datum} {end_str}", "%Y-%m-%d %H:%M")
 
-        if not zeit_text or not fach:
-            continue  # leeres Feld
+                    # Event erzeugen
+                    e = Event()
+                    e.begin = start_dt
+                    e.end = end_dt
+                    e.name = fach
+                    e.uid = str(uuid.uuid4()) + "@stundenplan"
+                    cal.events.add(e)
 
-        # Zeiten parsen
-        try:
-            start_str, end_str = zeit_text.split("-")
-            start_time = datetime.strptime(start_str.strip(), "%H:%M").time()
-            end_time = datetime.strptime(end_str.strip(), "%H:%M").time()
-        except ValueError:
-            continue  # Formatfehler
-
-        # Lokales Start- und Endzeit-Datum kombinieren
-        start_dt = timezone.localize(datetime.combine(datum, start_time))
-        end_dt = timezone.localize(datetime.combine(datum, end_time))
-
-        # Event erzeugen
-        event = Event()
-        event.name = fach
-        event.begin = start_dt.astimezone(pytz.utc)
-        event.end = end_dt.astimezone(pytz.utc)
-        event.uid = f"{uuid.uuid4()}@stundenplan"
-
-        cal.events.add(event)
-
-# --- Speichern ---
-with open(output_file, "w", encoding="utf-8") as f:
-    f.writelines(cal.serialize_iter())
+    # Speichern
+    with open(ics_path, "w", encoding="utf-8") as f:
+        f.writelines(cal.serialize_iter())
