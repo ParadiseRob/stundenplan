@@ -10,7 +10,7 @@ output_file = "stundenplan.ics"  # Ausgabe-ICS-Datei
 timezone = pytz.timezone("Europe/Berlin")
 
 # --- Einlesen und Parsen ---
-with open(input_file, "r", encoding="utf-8") as f:
+with open(input_file, "r", encoding="windows-1252") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
