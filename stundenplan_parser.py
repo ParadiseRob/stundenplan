@@ -2,19 +2,16 @@ from bs4 import BeautifulSoup
 from ics import Calendar, Event
 from datetime import datetime
 import pytz
+import uuid
 
-faecher = [
-    "Termin Ausbildung", "KFM", "RdG", "Verworga",
-    "AVR", "Buchf", "HSK", "BGB", "Pers.R", "Lehrprobe"
-]
-
-with open("stundenplan.html", "r", encoding="latin-1") as f:
+# Lade HTML-Datei
+with open("stundenplan.html", "r", encoding="latin1") as f:
     soup = BeautifulSoup(f, "html.parser")
 
-calendar = Calendar()
+cal = Calendar()
 timezone = pytz.timezone("Europe/Berlin")
-event_count = 0
 
+# Liste aller Tabellen mit Datumskopf
 tables = soup.find_all("table")
 print(f"[DEBUG] Tabellen gefunden: {len(tables)}")
 
@@ -22,48 +19,54 @@ for table in tables:
     header = table.find("th")
     if not header:
         continue
+
     try:
-        datum = datetime.strptime(header.text.strip(), "%d.%m.%Y").date()
-    except ValueError:
+        date_str = header.get_text(strip=True)
+        date = datetime.strptime(date_str, "%d.%m.%Y").date()
+    except:
         continue
 
-    stunden = table.find_all("td", bgcolor="#C0C0C0")
-    print(f"[DEBUG] {datum}: {len(stunden)} Einträge gefunden")
+    rows = table.find_all("tr")[1:]
+    print(f"[DEBUG] {date.isoformat()}: {len(rows)} Einträge gefunden")
 
-    for td in stunden:
-        fonts = td.find_all("font")
-        if len(fonts) < 2:
-            print("[DEBUG] Zu wenige <font>-Tags in Zelle, übersprungen.")
+    for row in rows:
+        cell = row.find("td")
+        if not cell:
             continue
 
-        zeitraum_text = fonts[0].text.strip()
-        fach_text = fonts[1].text.strip()
-        print(f"[DEBUG] Zeit: {zeitraum_text}, Fach: {fach_text}")
-
-        if not zeitraum_text or not fach_text:
+        parts = cell.find_all("font")
+        if len(parts) < 2:
             continue
 
-        zeiten = zeitraum_text.split("|")[0].strip()
+        time_text = parts[0].get_text(strip=True)
+        subject_text = parts[1].get_text(strip=True)
+
+        if not time_text or not subject_text:
+            print(f"[DEBUG] Zeit: {time_text}, Fach: {subject_text}")
+            continue
+
+        # Zeit extrahieren (z.B. "08:15-09:45 | 12/64")
+        time_range = time_text.split("|")[0].strip() if "|" in time_text else time_text
         try:
-            von, bis = zeiten.split("-")
-        except ValueError:
-            print("[DEBUG] Zeitformat ungültig:", zeiten)
+            start_str, end_str = [t.strip() for t in time_range.split("-")]
+            start_dt = timezone.localize(datetime.strptime(f"{date} {start_str}", "%Y-%m-%d %H:%M"))
+            end_dt = timezone.localize(datetime.strptime(f"{date} {end_str}", "%Y-%m-%d %H:%M"))
+        except:
+            print(f"[DEBUG] Fehler beim Parsen der Uhrzeit: '{time_range}'")
             continue
 
-        start_dt = datetime.strptime(f"{datum} {von.strip()}", "%Y-%m-%d %H:%M")
-        end_dt = datetime.strptime(f"{datum} {bis.strip()}", "%Y-%m-%d %H:%M")
-
+        # Event erzeugen
         event = Event()
-        event.name = fach_text
-        event.begin = timezone.localize(start_dt)
-        event.end = timezone.localize(end_dt)
-        calendar.events.add(event)
-        event_count += 1
-        print(f"[DEBUG] Event hinzugefügt: {fach_text} von {von} bis {bis}")
+        event.name = subject_text
+        event.begin = start_dt
+        event.end = end_dt
+        event.uid = str(uuid.uuid4()) + "@stundenplan"
+        cal.events.add(event)
 
-if event_count > 0:
-    with open("stundenplan.ics", "w", encoding="utf-8") as f:
-        f.writelines(calendar)
-    print(f"✅ {event_count} Termine geschrieben in stundenplan.ics")
-else:
-    print("⚠️ Keine gültigen Termine gefunden.")
+        print(f"[DEBUG] Event hinzugefügt: {subject_text} von {start_str} bis {end_str}")
+
+# ICS-Datei schreiben
+with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
+    f.writelines(cal.serialize_iter())
+
+print(f"✅ {len(cal.events)} Termine geschrieben in stundenplan_export.ics")
