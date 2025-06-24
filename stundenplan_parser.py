@@ -3,11 +3,10 @@ from ics import Calendar, Event
 from datetime import datetime, timedelta
 import uuid
 import pytz
+import re
 
-# Lokale Zeitzone definieren
 berlin = pytz.timezone("Europe/Berlin")
 
-# Lade die Stundenplan-HTML-Datei
 with open("stundenplan.html", encoding="windows-1252") as f:
     soup = BeautifulSoup(f, "html.parser")
 
@@ -38,15 +37,16 @@ for table in soup.find_all("table", {"border": "1"}):
         except ValueError:
             continue
 
-        # Finde sinnvollen Titel
+        # Suche nach Fachname (überspringe Uhrzeit und 32/56-Angaben)
         title = "Unterricht"
         for line in lines[1:]:
-            if "/" in line and any(c.isdigit() for c in line):
-                continue  # ignoriere Stundenanzahl wie "32/56"
+            if re.match(r"^\d+/\d+$", line):
+                continue  # ignoriere reine Zahlenformate wie 32/56
             if line.lower().startswith("raum") or line.lower().startswith("frau") or line.lower().startswith("herr"):
-                continue  # ignoriere Räume oder Namen
-            title = line
-            break
+                continue  # ignoriere Lehrkraft oder Räume
+            if line:  # Erste nicht-leere, gültige Zeile nehmen
+                title = line
+                break
 
         start_dt = berlin.localize(datetime.combine(date, start_time))
         end_dt = berlin.localize(datetime.combine(date, end_time))
@@ -58,6 +58,5 @@ for table in soup.find_all("table", {"border": "1"}):
         event.uid = f"{uuid.uuid4()}@stundenplan"
         cal.events.add(event)
 
-# Speichere die ICS-Datei
 with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
     f.writelines(cal.serialize_iter())
