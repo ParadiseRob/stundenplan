@@ -4,16 +4,16 @@ from datetime import datetime, timedelta
 import uuid
 import pytz
 
-# Lokale Zeitzone definieren
+# Lokale Zeitzone für Deutschland
 berlin = pytz.timezone("Europe/Berlin")
 
-# HTML laden
+# Stundenplan-HTML laden
 with open("stundenplan.html", encoding="windows-1252") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
 
-# Tabellen mit Tagesdaten durchgehen
+# Durch alle Tages-Tabellen gehen
 for table in soup.find_all("table", {"border": "1"}):
     th = table.find("th")
     if not th:
@@ -23,7 +23,7 @@ for table in soup.find_all("table", {"border": "1"}):
     except ValueError:
         continue
 
-    # Alle Unterrichtszellen verarbeiten
+    # Alle Zellen des Tages auswerten
     for td in table.find_all("td"):
         lines = list(td.stripped_strings)
         if not lines or "-" not in lines[0]:
@@ -44,12 +44,14 @@ for table in soup.find_all("table", {"border": "1"}):
         end_dt = berlin.localize(datetime.combine(date, end_time))
 
         e = Event()
-        e.name = subject if subject else "Unterricht"
+        e.name = subject
+        if note:
+            e.description = note
         e.begin = start_dt
         e.end = end_dt
         e.uid = f"{uuid.uuid4()}@stundenplan"
         cal.events.add(e)
 
-# Datei speichern
+# ICS-Datei schreiben
 with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
     f.writelines(cal.serialize_iter())
