@@ -23,7 +23,7 @@ jobs:
           pip install beautifulsoup4 ics
 
       - name: Run parser script
-        run: python main/stundenplan_parser.py
+        run: python stundenplan_parser.py
 
       - name: Commit and Push changes
         run: |
