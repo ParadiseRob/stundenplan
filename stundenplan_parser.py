@@ -11,7 +11,7 @@ with open("stundenplan.html", "r", encoding="latin1") as f:
 cal = Calendar()
 timezone = pytz.timezone("Europe/Berlin")
 
-# Alle Tabellen mit Datumskopf finden
+# Liste aller Tabellen mit Datumskopf
 tables = soup.find_all("table")
 print(f"[DEBUG] Tabellen gefunden: {len(tables)}")
 
@@ -23,11 +23,10 @@ for table in tables:
     try:
         date_str = header.get_text(strip=True)
         date = datetime.strptime(date_str, "%d.%m.%Y").date()
-    except Exception as e:
-        print(f"[DEBUG] Fehler beim Parsen des Datums: {e}")
+    except:
         continue
 
-    rows = table.find_all("tr")[1:]  # Skip header row
+    rows = table.find_all("tr")[1:]
     print(f"[DEBUG] {date.isoformat()}: {len(rows)} Einträge gefunden")
 
     for row in rows:
@@ -42,13 +41,9 @@ for table in tables:
         time_text = parts[0].get_text(strip=True)
         subject_text = parts[1].get_text(strip=True)
 
-        if not time_text:
-            print(f"[DEBUG] Keine Zeitangabe in Zeile, überspringe.")
+        if not time_text or not subject_text:
+            print(f"[DEBUG] Zeit: {time_text}, Fach: {subject_text}")
             continue
-
-        if not subject_text:
-            # Falls kein Fach angegeben ist, z.B. leere Stunden, überspringen oder "Unterricht" setzen
-            subject_text = "Unterricht"
 
         # Zeit extrahieren (z.B. "08:15-09:45 | 12/64")
         time_range = time_text.split("|")[0].strip() if "|" in time_text else time_text
@@ -56,8 +51,8 @@ for table in tables:
             start_str, end_str = [t.strip() for t in time_range.split("-")]
             start_dt = timezone.localize(datetime.strptime(f"{date} {start_str}", "%Y-%m-%d %H:%M"))
             end_dt = timezone.localize(datetime.strptime(f"{date} {end_str}", "%Y-%m-%d %H:%M"))
-        except Exception as e:
-            print(f"[DEBUG] Fehler beim Parsen der Uhrzeit '{time_range}': {e}")
+        except:
+            print(f"[DEBUG] Fehler beim Parsen der Uhrzeit: '{time_range}'")
             continue
 
         # Event erzeugen
