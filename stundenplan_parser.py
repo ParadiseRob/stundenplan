@@ -4,14 +4,13 @@ from datetime import datetime
 import pytz
 import uuid
 
-# Lade HTML-Datei
+# HTML-Datei laden
 with open("stundenplan.html", "r", encoding="latin1") as f:
     soup = BeautifulSoup(f, "html.parser")
 
 cal = Calendar()
 timezone = pytz.timezone("Europe/Berlin")
 
-# Liste aller Tabellen mit Datumskopf
 tables = soup.find_all("table")
 print(f"[DEBUG] Tabellen gefunden: {len(tables)}")
 
@@ -35,27 +34,27 @@ for table in tables:
             continue
 
         parts = cell.find_all("font")
-        if len(parts) < 2:
+        if len(parts) < 1:
             continue
 
-        time_text = parts[0].get_text(strip=True)
-        subject_text = parts[1].get_text(strip=True)
+        time_text = parts[0].get_text(strip=True) if len(parts) > 0 else ""
+        subject_text = parts[1].get_text(strip=True) if len(parts) > 1 else ""
 
-        if not time_text or not subject_text:
-            print(f"[DEBUG] Zeit: {time_text}, Fach: {subject_text}")
-            continue
+        # Falls kein Fach angegeben, "Unterricht" als Default
+        if not subject_text:
+            subject_text = "Unterricht"
 
         # Zeit extrahieren (z.B. "08:15-09:45 | 12/64")
         time_range = time_text.split("|")[0].strip() if "|" in time_text else time_text
+
         try:
             start_str, end_str = [t.strip() for t in time_range.split("-")]
             start_dt = timezone.localize(datetime.strptime(f"{date} {start_str}", "%Y-%m-%d %H:%M"))
             end_dt = timezone.localize(datetime.strptime(f"{date} {end_str}", "%Y-%m-%d %H:%M"))
-        except:
-            print(f"[DEBUG] Fehler beim Parsen der Uhrzeit: '{time_range}'")
+        except Exception as e:
+            print(f"[DEBUG] Fehler beim Parsen der Uhrzeit '{time_range}': {e}")
             continue
 
-        # Event erzeugen
         event = Event()
         event.name = subject_text
         event.begin = start_dt
