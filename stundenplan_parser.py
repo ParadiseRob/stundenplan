@@ -35,11 +35,19 @@ for table in tables:
             continue
 
         parts = cell.find_all("font")
-        if len(parts) < 2:
+        if len(parts) < 1:
             continue
 
         time_text = parts[0].get_text(strip=True)
-        subject_text = parts[1].get_text(strip=True)
+
+        # Versuche subject_text im zweiten font-Tag, wenn vorhanden
+        subject_text = parts[1].get_text(strip=True) if len(parts) > 1 else ""
+
+        # Wenn subject_text leer, prüfe ob kursiver Text im cell ist (für Sondertermine)
+        if not subject_text:
+            italic = cell.find("i")
+            if italic and italic.get_text(strip=True):
+                subject_text = italic.get_text(strip=True)
 
         if not time_text or not subject_text:
             print(f"[DEBUG] Zeit: {time_text}, Fach: {subject_text}")
