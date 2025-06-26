@@ -13,6 +13,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Backup old ICS file
+        run: |
+          if [ -f stundenplan_export.ics ]; then
+            cp stundenplan_export.ics stundenplan_export_old.ics
+            git add stundenplan_export_old.ics
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,9 +45,5 @@ jobs:
             git push origin HEAD:main || echo "Push failed"
           fi
 
-      - name: Run monitor script and send mail on changes
+      - name: Run monitor script
         run: python stundenplan_monitor.py
-        env:
-          SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          MAIL_RECIPIENT: ${{ secrets.MAIL_RECIPIENT }}
