@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 from ics import Calendar, Event
 from datetime import datetime
 import pytz
-import uuid
+import hashlib
 
 # Lade HTML-Datei
 with open("stundenplan.html", "r", encoding="latin1") as f:
@@ -53,28 +53,4 @@ for table in tables:
             print(f"[DEBUG] Zeit: {time_text}, Fach: {subject_text}")
             continue
 
-        # Zeit extrahieren (z.B. "08:15-09:45 | 12/64")
-        time_range = time_text.split("|")[0].strip() if "|" in time_text else time_text
-        try:
-            start_str, end_str = [t.strip() for t in time_range.split("-")]
-            start_dt = timezone.localize(datetime.strptime(f"{date} {start_str}", "%Y-%m-%d %H:%M"))
-            end_dt = timezone.localize(datetime.strptime(f"{date} {end_str}", "%Y-%m-%d %H:%M"))
-        except:
-            print(f"[DEBUG] Fehler beim Parsen der Uhrzeit: '{time_range}'")
-            continue
-
-        # Event erzeugen
-        event = Event()
-        event.name = subject_text
-        event.begin = start_dt
-        event.end = end_dt
-        event.uid = str(uuid.uuid4()) + "@stundenplan"
-        cal.events.add(event)
-
-        print(f"[DEBUG] Event hinzugefügt: {subject_text} von {start_str} bis {end_str}")
-
-# ICS-Datei schreiben
-with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
-    f.writelines(cal.serialize_iter())
-
-print(f"✅ {len(cal.events)} Termine geschrieben in stundenplan_export.ics")
+        # Zeit extra
