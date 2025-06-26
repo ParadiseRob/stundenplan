@@ -39,7 +39,7 @@ jobs:
           fi
 
       - name: Run monitor script and send mail on changes
-        run: python ./stundenplan-monitor.py
+        run: python stundenplan_monitor.py
         env:
           SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
