@@ -46,4 +46,8 @@ jobs:
           fi
 
       - name: Run monitor script
+        env:
+          SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_RECIPIENT: ${{ secrets.MAIL_RECIPIENT }}
         run: python stundenplan_monitor.py
