@@ -36,13 +36,23 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+
+          # Alle Änderungen zum Commit hinzufügen (auch vor Pull)
+          git add -A
+
+          # Commit erstellen falls Änderungen da sind
+          git commit -m "Auto-commit vor Pull" || echo "Keine Änderungen zum Committen"
+
+          # Pull mit Rebase
           git pull --rebase origin main || echo "Nothing to rebase"
+
+          # Nach Pull prüfen, ob neue Änderungen für Commit da sind
           if git diff --quiet; then
             echo "No changes to commit"
           else
             git add stundenplan_export.ics
-            git commit -m "Update ICS automatically"
-            git push origin HEAD:main || echo "Push failed"
+            git commit -m "Update ICS automatisch"
+            git push origin HEAD:main || echo "Push fehlgeschlagen"
           fi
 
       - name: Run monitor script
