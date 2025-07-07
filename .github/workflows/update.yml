@@ -32,27 +32,24 @@ jobs:
       - name: Run parser script
         run: python stundenplan_parser.py
 
-      - name: Commit and push ICS changes
+      - name: Commit and push ICS changes if changed
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          # Alle Änderungen zum Commit hinzufügen (auch vor Pull)
-          git add -A
+          OLD_HASH=$(sha256sum stundenplan_export_old.ics 2>/dev/null | cut -d' ' -f1 || echo "")
+          NEW_HASH=$(sha256sum stundenplan_export.ics 2>/dev/null | cut -d' ' -f1 || echo "")
 
-          # Commit erstellen falls Änderungen da sind
-          git commit -m "Auto-commit vor Pull" || echo "Keine Änderungen zum Committen"
+          echo "OLD_HASH=$OLD_HASH"
+          echo "NEW_HASH=$NEW_HASH"
 
-          # Pull mit Rebase
-          git pull --rebase origin main || echo "Nothing to rebase"
-
-          # Nach Pull prüfen, ob neue Änderungen für Commit da sind
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
+          if [ "$OLD_HASH" != "$NEW_HASH" ]; then
+            echo "ICS-Datei hat sich geändert. Commit und Push werden ausgeführt."
             git add stundenplan_export.ics
             git commit -m "Update ICS automatisch"
-            git push origin HEAD:main || echo "Push fehlgeschlagen"
+            git push origin HEAD:main
+          else
+            echo "Keine Änderung an der ICS-Datei, kein Commit nötig."
           fi
 
       - name: Run monitor script
