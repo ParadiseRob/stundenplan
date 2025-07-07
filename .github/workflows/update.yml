@@ -27,7 +27,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install beautifulsoup4 ics pytz
+          pip install beautifulsoup4 ics pytz requests
 
       - name: Run parser script
         run: python stundenplan_parser.py
