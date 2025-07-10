@@ -23,6 +23,8 @@ soup = BeautifulSoup(html_content, "html.parser")
 tables = soup.find_all("table")
 print(f"[DEBUG] Tabellen gefunden: {len(tables)}")
 
+event_count = 0
+
 for table in tables:
     header = table.find("th")
     if not header:
@@ -73,10 +75,17 @@ for table in tables:
         event.end = end_dt
         event.uid = event_uid
         cal.events.add(event)
+        event_count += 1
 
         print(f"[DEBUG] Event hinzugefügt: {subject_text} von {start_str} bis {end_str}")
 
+# Sicherheitsprüfung: Falls keine Events gefunden wurden, abbrechen
+if event_count == 0:
+    print("[WARNUNG] Keine Termine gefunden – ICS-Datei wird NICHT überschrieben.")
+    sys.exit(1)
+
+# ICS-Datei schreiben
 with open("stundenplan_export.ics", "w", encoding="utf-8") as f:
     f.writelines(cal.serialize_iter())
 
-print(f"✅ {len(cal.events)} Termine geschrieben in stundenplan_export.ics")
+print(f"✅ {event_count} Termine geschrieben in stundenplan_export.ics")
