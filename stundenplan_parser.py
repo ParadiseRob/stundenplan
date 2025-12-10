@@ -5,7 +5,7 @@ import pytz
 import requests  # für HTTP-Requests
 import sys
 
-URL = "https://studieninstitute.org/Duisburg/kursauswahl.php?KursName=Stg25FiSoG&abc=S"
+URL = "https://studieninstitute.org/Duisburg/kursauswahl.php?KursName=Stg25FiSoH&abc=S"
 
 cal = Calendar()
 timezone = pytz.timezone("Europe/Berlin")
