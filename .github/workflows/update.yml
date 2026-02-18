@@ -23,11 +23,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
-          pip install beautifulsoup4 ics pytz requests
+          pip install --upgrade pip
+          pip install beautifulsoup4 ics pytz requests rich
 
       - name: Run parser script
         run: python stundenplan_parser.py
