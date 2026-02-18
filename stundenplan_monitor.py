@@ -1,62 +1,70 @@
 import os
-import re
 import smtplib
 import ssl
 from email.message import EmailMessage
 from datetime import datetime
-import pytz
+import re
 
-PREV_ICS_PATH = "stundenplan_export_prev.ics"
+OLD_ICS_PATH = "stundenplan_export_old.ics"
 NEW_ICS_PATH = "stundenplan_export.ics"
-TZ = pytz.timezone("Europe/Berlin")
 
-def parse_ics_events(file_path):
+UID_RE = re.compile(r"^UID:(.*)$")
+DTSTART_RE = re.compile(r"^DTSTART:(.*)$")
+SUMMARY_RE = re.compile(r"^SUMMARY:(.*)$")
+
+
+def parse_ics_events(path: str):
     """
-    Extrahiert minimal:
-      UID, DTSTART (UTC Z), SUMMARY
-    Rückgabe: set((uid, day_iso, summary))
+    Minimal-Parser: liest UID, DTSTART, SUMMARY pro VEVENT.
+    Gibt Set von (uid, day_iso, summary) zurück.
     """
-    if not os.path.exists(file_path):
+    if not os.path.exists(path):
         return set()
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    # sehr simples VEVENT parsing
-    blocks = re.split(r"BEGIN:VEVENT\r?\n", text)
     events = set()
+    current = {}
 
-    for b in blocks[1:]:
-        # Block endet vor END:VEVENT
-        b = b.split("END:VEVENT", 1)[0]
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        for raw in f:
+            line = raw.strip()
 
-        uid = None
-        dtstart = None
-        summary = None
+            if line == "BEGIN:VEVENT":
+                current = {}
+                continue
 
-        for line in b.splitlines():
-            line = line.strip()
-            if line.startswith("UID:"):
-                uid = line[4:].strip()
-            elif line.startswith("DTSTART:"):
-                dtstart = line[len("DTSTART:"):].strip()
-            elif line.startswith("SUMMARY:"):
-                summary = line[len("SUMMARY:"):].strip()
+            if line == "END:VEVENT":
+                uid = current.get("uid")
+                dtstart = current.get("dtstart")
+                summary = current.get("summary", "")
+                if uid and dtstart:
+                    # DTSTART ist UTC im Format YYYYMMDDTHHMMSSZ
+                    try:
+                        day = datetime.strptime(dtstart[:8], "%Y%m%d").date().isoformat()
+                        events.add((uid, day, summary))
+                    except:
+                        pass
+                current = {}
+                continue
 
-        if not (uid and dtstart and summary):
-            continue
+            m = UID_RE.match(line)
+            if m:
+                current["uid"] = m.group(1).strip()
+                continue
 
-        # DTSTART ist im Parser als UTC Z geschrieben: YYYYMMDDTHHMMSSZ
-        try:
-            dt_utc = datetime.strptime(dtstart, "%Y%m%dT%H%M%SZ").replace(tzinfo=pytz.utc)
-            dt_local = dt_utc.astimezone(TZ)
-            day = dt_local.date().isoformat()
-        except Exception:
-            continue
+            m = DTSTART_RE.match(line)
+            if m:
+                current["dtstart"] = m.group(1).strip()
+                continue
 
-        events.add((uid, day, summary))
+            m = SUMMARY_RE.match(line)
+            if m:
+                # Unescape minimal
+                s = m.group(1).replace("\\n", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
+                current["summary"] = s.strip()
+                continue
 
     return events
+
 
 def extract_changed_days(old_events, new_events):
     old_ids = {e[0] for e in old_events}
@@ -74,6 +82,7 @@ def extract_changed_days(old_events, new_events):
             changed_days.add(e[1])
 
     return sorted(changed_days)
+
 
 def send_mail(changed_days, smtp_email, smtp_password, mail_recipient):
     message = EmailMessage()
@@ -93,6 +102,7 @@ def send_mail(changed_days, smtp_email, smtp_password, mail_recipient):
         smtp.login(smtp_email, smtp_password)
         smtp.send_message(message)
 
+
 def main():
     smtp_email = os.getenv("SMTP_EMAIL")
     smtp_password = os.getenv("SMTP_PASSWORD")
@@ -102,22 +112,24 @@ def main():
         print("Bitte SMTP_EMAIL, SMTP_PASSWORD und MAIL_RECIPIENT als Secrets setzen!")
         return
 
-    old_events = parse_ics_events(PREV_ICS_PATH)
+    old_events = parse_ics_events(OLD_ICS_PATH)
     new_events = parse_ics_events(NEW_ICS_PATH)
-
-    if not old_events:
-        print("Kein vorheriger Stand vorhanden (erste Ausführung?) – keine Mail.")
-        return
 
     if new_events != old_events:
         changed_days = extract_changed_days(old_events, new_events)
         if changed_days:
             print(f"Änderungen gefunden an Tagen: {changed_days}, sende Mail...")
             send_mail(changed_days, smtp_email, smtp_password, mail_recipient)
+
+            # Neue Datei als alt speichern
+            with open(NEW_ICS_PATH, "r", encoding="utf-8", errors="ignore") as f_new, \
+                 open(OLD_ICS_PATH, "w", encoding="utf-8") as f_old:
+                f_old.write(f_new.read())
         else:
             print("Änderungen entdeckt, aber keine Tage zum Melden gefunden.")
     else:
         print("Keine Änderungen zum Stundenplan.")
+
 
 if __name__ == "__main__":
     main()
