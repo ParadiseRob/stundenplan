@@ -1,26 +1,61 @@
 import os
+import re
 import smtplib
 import ssl
 from email.message import EmailMessage
-from ics import Calendar
+from datetime import datetime
+import pytz
 
-OLD_ICS_PATH = "stundenplan_export_old.ics"
+PREV_ICS_PATH = "stundenplan_export_prev.ics"
 NEW_ICS_PATH = "stundenplan_export.ics"
+TZ = pytz.timezone("Europe/Berlin")
 
-def load_events(file_path):
+def parse_ics_events(file_path):
+    """
+    Extrahiert minimal:
+      UID, DTSTART (UTC Z), SUMMARY
+    Rückgabe: set((uid, day_iso, summary))
+    """
     if not os.path.exists(file_path):
-        print(f"[WARN] Datei {file_path} existiert nicht.")
         return set()
+
     with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-        if not content.strip():
-            print(f"[WARN] Datei {file_path} ist leer.")
-            return set()
-        c = Calendar(content)
+        text = f.read()
+
+    # sehr simples VEVENT parsing
+    blocks = re.split(r"BEGIN:VEVENT\r?\n", text)
     events = set()
-    for e in c.events:
-        day = e.begin.date().isoformat()
-        events.add((e.uid, day, e.name))
+
+    for b in blocks[1:]:
+        # Block endet vor END:VEVENT
+        b = b.split("END:VEVENT", 1)[0]
+
+        uid = None
+        dtstart = None
+        summary = None
+
+        for line in b.splitlines():
+            line = line.strip()
+            if line.startswith("UID:"):
+                uid = line[4:].strip()
+            elif line.startswith("DTSTART:"):
+                dtstart = line[len("DTSTART:"):].strip()
+            elif line.startswith("SUMMARY:"):
+                summary = line[len("SUMMARY:"):].strip()
+
+        if not (uid and dtstart and summary):
+            continue
+
+        # DTSTART ist im Parser als UTC Z geschrieben: YYYYMMDDTHHMMSSZ
+        try:
+            dt_utc = datetime.strptime(dtstart, "%Y%m%dT%H%M%SZ").replace(tzinfo=pytz.utc)
+            dt_local = dt_utc.astimezone(TZ)
+            day = dt_local.date().isoformat()
+        except Exception:
+            continue
+
+        events.add((uid, day, summary))
+
     return events
 
 def extract_changed_days(old_events, new_events):
@@ -37,6 +72,7 @@ def extract_changed_days(old_events, new_events):
     for e in old_events:
         if e[0] in removed:
             changed_days.add(e[1])
+
     return sorted(changed_days)
 
 def send_mail(changed_days, smtp_email, smtp_password, mail_recipient):
@@ -53,13 +89,9 @@ def send_mail(changed_days, smtp_email, smtp_password, mail_recipient):
     message.set_content(body)
 
     context = ssl.create_default_context()
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as smtp:
-            smtp.login(smtp_email, smtp_password)
-            smtp.send_message(message)
-        print("[INFO] E-Mail erfolgreich gesendet.")
-    except Exception as e:
-        print(f"[ERROR] Fehler beim Senden der E-Mail: {e}")
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as smtp:
+        smtp.login(smtp_email, smtp_password)
+        smtp.send_message(message)
 
 def main():
     smtp_email = os.getenv("SMTP_EMAIL")
@@ -69,13 +101,12 @@ def main():
     if not all([smtp_email, smtp_password, mail_recipient]):
         print("Bitte SMTP_EMAIL, SMTP_PASSWORD und MAIL_RECIPIENT als Secrets setzen!")
         return
-    print("[INFO] SMTP und Mail-Empfänger sind gesetzt.")
 
-    old_events = load_events(OLD_ICS_PATH)
-    new_events = load_events(NEW_ICS_PATH)
+    old_events = parse_ics_events(PREV_ICS_PATH)
+    new_events = parse_ics_events(NEW_ICS_PATH)
 
-    if not new_events:
-        print("[WARN] Keine neuen Events geladen, Abbruch.")
+    if not old_events:
+        print("Kein vorheriger Stand vorhanden (erste Ausführung?) – keine Mail.")
         return
 
     if new_events != old_events:
@@ -83,13 +114,6 @@ def main():
         if changed_days:
             print(f"Änderungen gefunden an Tagen: {changed_days}, sende Mail...")
             send_mail(changed_days, smtp_email, smtp_password, mail_recipient)
-            try:
-                with open(NEW_ICS_PATH, "r", encoding="utf-8") as f_new, \
-                     open(OLD_ICS_PATH, "w", encoding="utf-8") as f_old:
-                    f_old.write(f_new.read())
-                print("[INFO] Alte ICS-Datei aktualisiert.")
-            except Exception as e:
-                print(f"[ERROR] Fehler beim Aktualisieren der alten ICS-Datei: {e}")
         else:
             print("Änderungen entdeckt, aber keine Tage zum Melden gefunden.")
     else:
