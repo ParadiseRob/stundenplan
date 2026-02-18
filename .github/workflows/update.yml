@@ -23,34 +23,32 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install beautifulsoup4 ics pytz requests rich
+          python -m pip install --upgrade pip
+          pip install beautifulsoup4 pytz requests "ics==0.7.2" "tatsu<5.17"
 
       - name: Run parser script
         run: python stundenplan_parser.py
 
-      - name: Commit and push ICS changes if changed
+      - name: Commit and push ICS changes
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          OLD_HASH=$(sha256sum stundenplan_export_old.ics 2>/dev/null | cut -d' ' -f1 || echo "")
-          NEW_HASH=$(sha256sum stundenplan_export.ics 2>/dev/null | cut -d' ' -f1 || echo "")
+          git add -A
+          git commit -m "Auto-commit vor Pull" || echo "Keine Änderungen zum Committen"
 
-          echo "OLD_HASH=$OLD_HASH"
-          echo "NEW_HASH=$NEW_HASH"
+          git pull --rebase origin main || echo "Nothing to rebase"
 
-          if [ "$OLD_HASH" != "$NEW_HASH" ]; then
-            echo "ICS-Datei hat sich geändert. Commit und Push werden ausgeführt."
-            git add stundenplan_export.ics
-            git commit -m "Update ICS automatisch"
-            git push origin HEAD:main
+          if git diff --quiet; then
+            echo "No changes to commit"
           else
-            echo "Keine Änderung an der ICS-Datei, kein Commit nötig."
+            git add stundenplan_export.ics stundenplan_export_old.ics
+            git commit -m "Update ICS automatisch"
+            git push origin HEAD:main || echo "Push fehlgeschlagen"
           fi
 
       - name: Run monitor script
