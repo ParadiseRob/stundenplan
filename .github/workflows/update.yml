@@ -3,7 +3,7 @@ name: Update ICS file daily
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 7 * * *'  # täglich um 07:00 UTC
+    - cron: "0 7 * * *"  # täglich um 07:00 UTC
 
 jobs:
   build:
@@ -13,43 +13,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Backup old ICS file
-        run: |
-          if [ -f stundenplan_export.ics ]; then
-            cp stundenplan_export.ics stundenplan_export_old.ics
-            git add stundenplan_export_old.ics
-          fi
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install beautifulsoup4 pytz requests "ics==0.7.2" "tatsu<5.17"
+          pip install beautifulsoup4 pytz requests
+
+      - name: Backup current ICS (runner only)
+        run: |
+          if [ -f stundenplan_export.ics ]; then
+            cp stundenplan_export.ics stundenplan_export_prev.ics
+          fi
 
       - name: Run parser script
         run: python stundenplan_parser.py
-
-      - name: Commit and push ICS changes
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          git add -A
-          git commit -m "Auto-commit vor Pull" || echo "Keine Änderungen zum Committen"
-
-          git pull --rebase origin main || echo "Nothing to rebase"
-
-          if git diff --quiet; then
-            echo "No changes to commit"
-          else
-            git add stundenplan_export.ics stundenplan_export_old.ics
-            git commit -m "Update ICS automatisch"
-            git push origin HEAD:main || echo "Push fehlgeschlagen"
-          fi
 
       - name: Run monitor script
         env:
@@ -57,3 +38,19 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_RECIPIENT: ${{ secrets.MAIL_RECIPIENT }}
         run: python stundenplan_monitor.py
+
+      - name: Commit and push ICS changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          # nur die Export-Datei versionieren
+          git add stundenplan_export.ics || true
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "Update ICS automatically"
+          git push
