@@ -3,7 +3,7 @@ name: Update ICS file daily
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 7 * * *'  # täglich um 07:00 UTC
 
 jobs:
   build:
@@ -12,6 +12,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pull latest
+        run: |
+          git pull --rebase origin main || echo "Nothing to rebase"
 
       - name: Backup old ICS file
         run: |
@@ -36,13 +42,13 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add stundenplan_export.ics
-
-          if git diff --cached --quiet; then
+          # Nur committen, wenn es echte Änderungen gibt
+          if git diff --quiet; then
             echo "No changes to commit"
           else
+            git add stundenplan_export.ics stundenplan_export_old.ics || true
             git commit -m "Update ICS automatically"
-            git push
+            git push origin HEAD:main
           fi
 
       - name: Run monitor script
